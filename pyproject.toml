@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grimescan"
+version = "0.1.0"
+description = "Find the grime in huge datasets without writing rules: missing and disguised nulls, duplicates, wrong values, values that don't belong, broken rows and leaked sensitive data, in one streaming pass."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Vasu Koduri" }]
+keywords = ["data-quality", "data-validation", "data-profiling", "data-cleaning", "duplicates", "anomaly-detection", "csv", "parquet", "pandas", "data-engineering"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Database",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = ["numpy>=1.23"]
+
+[project.optional-dependencies]
+pandas = ["pandas>=1.5"]
+polars = ["polars>=0.20"]
+parquet = ["pyarrow>=12"]
+all = ["pandas>=1.5", "polars>=0.20", "pyarrow>=12"]
+dev = ["pytest>=7", "pytest-cov>=4", "ruff>=0.5"]
+
+[project.scripts]
+grimescan = "grimescan.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/vasukoduri/grimescan"
+Issues = "https://github.com/vasukoduri/grimescan/issues"
+Changelog = "https://github.com/vasukoduri/grimescan/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/vasukoduri/grimescan#readme"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "E731"]

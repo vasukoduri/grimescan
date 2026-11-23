@@ -1,0 +1,107 @@
+name: Release
+
+# Publishes to PyPI and creates the GitHub release when a version tag (vX.Y.Z) is pushed,
+# or when the workflow is run manually from the Actions tab ("Run workflow" on main), in which
+# case the vX.Y.Z tag is created from the package version. Also runs for releases published in the UI.
+# Uses PyPI trusted publishing (OIDC): no API tokens or passwords are stored in the repo.
+
+on:
+  push:
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip build twine packaging
+          pip install -e ".[dev]"
+      - name: Check the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python - <<'PY'
+          import os, sys, tomllib
+          from packaging.version import Version
+          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          version = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+          if Version(tag) != Version(version):
+              sys.exit(f"::error::Tag {os.environ['GITHUB_REF_NAME']} does not match pyproject.toml version {version}")
+          print(f"tag {tag} matches version {version}")
+          PY
+      - name: Test
+        run: pytest
+      - name: Build
+        run: python -m build
+      - name: Check package metadata
+        run: twine check --strict dist/*
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          python - <<'PY'
+          import re, tomllib
+          version = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          m = re.search(rf"^## {re.escape(version)}\b.*?$(.*?)(?=^## |\Z)", text, re.S | re.M)
+          notes = (m.group(1).strip() if m else f"Release {version}") + (
+              "\n\n---\n\n```bash\npip install grimescan==" + version + "\n```\n"
+          )
+          open("release-notes.md", "w", encoding="utf-8").write(notes)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/
+            release-notes.md
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/grimescan/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  github-release:
+    name: Create GitHub release
+    needs: build
+    # tag pushes and manual runs; a release published in the UI already exists
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+      - name: Create the release (and the tag, on manual runs) with the built files attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"; TARGET="--verify-tag"
+          else
+            VERSION=$(ls dist/*.tar.gz | sed -E 's|dist/grimescan-(.*)\.tar\.gz|\1|')
+            TAG="v$VERSION"; TARGET="--target $GITHUB_SHA"
+          fi
+          gh release create "$TAG" dist/* $TARGET \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "grimescan $TAG" \
+            --notes-file release-notes.md
